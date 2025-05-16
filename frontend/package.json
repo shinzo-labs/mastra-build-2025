@@ -1,0 +1,51 @@
+{
+  "name": "shinzo-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "",
+  "main": "index.ts",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  },
+  "author": "Austin Born (austin@shinzolabs.com)",
+  "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.5.0",
+    "@monaco-editor/react": "^4.7.0",
+    "@mui/icons-material": "^6.4.5",
+    "ethers": "^6.13.5",
+    "jwt-decode": "^4.0.0",
+    "lucide-react": "^0.476.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-scripts": "^5.0.1"
+  },
+  "devDependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@ethersproject/providers": "^5.7.2",
+    "@mui/material": "^6.4.5",
+    "@types/node": "^22.13.5",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "typescript": "^5.7.3"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "core-js",
+      "core-js-pure"
+    ]
+  }
+}

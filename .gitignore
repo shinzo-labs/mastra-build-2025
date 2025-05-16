@@ -1,0 +1,15 @@
+.env*
+!.env.example
+.vscode
+data/
+node_modules
+build
+dist/
+tsconfig.tsbuildinfo
+.DS_STORE
+
+#SSL Certificate copied from /etc
+/etc
+/certs
+
+notes.txt
