@@ -4,7 +4,7 @@
 
 As Shinzo Labs' submission to the Mastra Build 2025 Hackathon, the Crypto Financial Advisor is your all-in-one tool to analyze transactional history and token balance data for any EVM network address. Simply copy your address of choice into the app and submit to receive a full transaction history, as well as personalized financial advice and clarifications from an agent connected to other financial tools like CoinMarketCap, Infura, and Etherscan.
 
-For a limited time, check it out at [https://shinzo.app](https://shinzo.app)!
+For a limited time, check it out at [https://www.shinzo.app](https://www.shinzo.app)!
 
 <p align="center"><img height="512" src=https://github.com/user-attachments/assets/74b80c21-bac2-44f3-baae-75b580ca8739></p>
 
