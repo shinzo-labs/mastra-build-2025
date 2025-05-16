@@ -1,0 +1,62 @@
+import { openai } from "@ai-sdk/openai"
+import { Agent } from "@mastra/core/agent"
+import {
+  callContractTool,
+  cryptoCategories,
+  cryptoCategory,
+  cryptoCurrencyMap,
+  cryptoCurrencyMetadata,
+  allCryptocurrencyListings,
+  cryptoQuotesLatest,
+  dexInfo,
+  dexListingsLatest,
+  dexListingsQuotes,
+  dexNetworksList,
+  dexSpotPairsLatest,
+  dexPairsQuotesLatest,
+  dexPairsOhlcvLatest,
+  dexPairsOhlcvHistorical,
+  dexPairsTradeLatest,
+  exchangeAssets,
+  exchangeInfo,
+  exchangeMap,
+  cmc100IndexHistorical,
+  cmc100IndexLatest,
+  fearAndGreedLatest,
+  fearAndGreedHistorical,
+  fiatMap,
+  priceConversion
+} from "./tools"
+
+export const createFinancialAgent = async (instructions: string) => new Agent({
+  name: "financial-agent",
+  instructions: instructions,
+  model: openai("gpt-4o-mini"),
+  tools: {
+    callContractTool,
+    cryptoCategories,
+    cryptoCategory,
+    cryptoCurrencyMap,
+    cryptoCurrencyMetadata,
+    allCryptocurrencyListings,
+    cryptoQuotesLatest,
+    dexInfo,
+    dexListingsLatest,
+    dexListingsQuotes,
+    dexNetworksList,
+    dexSpotPairsLatest,
+    dexPairsQuotesLatest,
+    dexPairsOhlcvLatest,
+    dexPairsOhlcvHistorical,
+    dexPairsTradeLatest,
+    exchangeAssets,
+    exchangeInfo,
+    exchangeMap,
+    cmc100IndexHistorical,
+    cmc100IndexLatest,
+    fearAndGreedLatest,
+    fearAndGreedHistorical,
+    fiatMap,
+    priceConversion
+  }
+})

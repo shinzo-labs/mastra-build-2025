@@ -1,178 +1,176 @@
-import { getAuthHeader } from './utils'
 import { BACKEND_URL } from './config'
-import { BlockchainQuery, GridItem, Dashboard, NetworkList } from './types'
 
-const handleAuthError = () => {
-  document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;'
-  window.location.reload()
+export type Transaction = {
+  blockNumber: string
+  blockHash: string
+  timeStamp: string
+  hash: string
+  nonce: string
+  transactionIndex: string
+  from: string
+  to: string
+  value: string
+  gas: string
+  gasPrice: string
+  input: string
+  methodId: string
+  functionName: string
+  contractAddress: string
+  cumulativeGasUsed: string
+  txreceipt_status: string
+  gasUsed: string
+  confirmations: string
+  isError: string
 }
 
-const dashboardService = {
-  async list(filters?: { owner_uuid?: string }): Promise<Dashboard[]> {
-    try {
-      const response = await fetch(`${BACKEND_URL}/dashboard/list`, {
+// --- Etherscan Rate Limiter (Frontend) ---
+const ETHERSCAN_RATE_LIMIT = 5 // per second
+const ETHERSCAN_INTERVAL = 1000 / ETHERSCAN_RATE_LIMIT
+let etherscanQueue: (() => void)[] = []
+let etherscanActive = false
+
+function processEtherscanQueue() {
+  if (etherscanActive || etherscanQueue.length === 0) return
+  etherscanActive = true
+  const next = etherscanQueue.shift()
+  if (next) next()
+  setTimeout(() => {
+    etherscanActive = false
+    processEtherscanQueue()
+  }, ETHERSCAN_INTERVAL)
+}
+
+function rateLimitedFetchTokenBalance(request: any, BACKEND_URL: string) {
+  return new Promise<any>((resolve, reject) => {
+    etherscanQueue.push(() => {
+      fetch(`${BACKEND_URL}/etherscan/getTokenBalance`, {
         method: 'POST',
-        headers: getAuthHeader(),
-        body: JSON.stringify(filters || {})
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request)
+      })
+        .then(async response => {
+          if (response.status === 401) return resolve({ balance: '0', decimals: 0, error: 'Unauthorized' })
+          const data = await response.json()
+          resolve(data.error ? { balance: '0', decimals: 0, error: data.error } : { balance: data.body.balance, decimals: data.body.decimals })
+        })
+        .catch(error => {
+          console.error('Error in getTokenBalance:', error)
+          resolve({ balance: '0', decimals: 0, error: 'Error fetching token balance' })
+        })
+    })
+    processEtherscanQueue()
+  })
+}
+
+const etherscanService = {
+  async getTxHistory(request: {
+    address: string
+    chainId: number
+    page: number
+    offset: number
+    startBlock: number
+    endBlock?: number
+    sort: string
+  }): Promise<{
+    txHistory: Transaction[]
+    error?: string
+  }> {
+    try {
+      const response = await fetch(`${BACKEND_URL}/etherscan/getTxHistory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request)
       })
 
-      if (response.status === 401) {
-        handleAuthError()
-        return []
-      }
+      if (response.status === 401) return { txHistory: [], error: 'Unauthorized' }
 
       const data = await response.json()
-      return data.error ? [] : data.body.dashboards
+      return data.error ? { txHistory: [], error: data.error } : { txHistory: data.body.txHistory }
     } catch (error) {
-      console.error('Error in list:', error)
-      return []
+      console.error('Error in getTxHistory:', error)
+      return { txHistory: [], error: 'Error fetching tx history' }
     }
   },
-
-  async read(uuid: string): Promise<{
-    error?: boolean
-    body?: Dashboard
-  }> {
+  async getTokenBalance(request: {
+    address: string
+    chainId: number
+    tokenAddress: string
+  }): Promise<{ balance: string, decimals: number, error?: string }> {
+    return rateLimitedFetchTokenBalance(request, BACKEND_URL)
+  },
+  async buildContractABIMappingAndExtractTokens(request: { txs: Transaction[], chainId: number }): Promise<{ abiMap: Record<string, any[]>, tokenAddresses: string[] }> {
     try {
-      const response = await fetch(`${BACKEND_URL}/dashboard/read`, {
+      const response = await fetch(`${BACKEND_URL}/etherscan/buildContractABIMappingAndExtractTokens`, {
         method: 'POST',
-        headers: getAuthHeader(),
-        body: JSON.stringify({ uuid })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request)
       })
-
-      if (response.status === 401) {
-        handleAuthError()
-        return { error: true }
-      }
-
+      if (!response.ok) return { abiMap: {}, tokenAddresses: [] }
       const data = await response.json()
-
-      if (data.body?.config?.gridItems) {
-        const typedGridItems: Record<string, GridItem> = {}
-        Object.entries(data.body.config.gridItems).forEach(([id, item]) => {
-          const gridItem = item as GridItem
-          typedGridItems[id] = gridItem
-        })
-        data.body.config.gridItems = typedGridItems
-      }
-
-      if (data.body?.config?.blockchainQueries) {
-        const typedBlockchainQueries: Record<string, BlockchainQuery> = {}
-        Object.entries(data.body.config.blockchainQueries).forEach(([id, query]) => {
-          const blockchainQuery = query as BlockchainQuery
-          typedBlockchainQueries[id] = blockchainQuery
-        })
-        data.body.config.blockchainQueries = typedBlockchainQueries
-      }
-
-      return data
+      return { abiMap: data.body.abiMap, tokenAddresses: data.body.tokenAddresses || [] }
     } catch (error) {
-      console.error('Error in read:', error)
-      return { error: true }
+      console.error('Error in extractTokenAddresses:', error)
+      return { abiMap: {}, tokenAddresses: [] }
     }
-  },
-
-  async update(uuid: string, updates: Partial<Dashboard>): Promise<void> {
-    await fetch(`${BACKEND_URL}/dashboard/update`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify({ uuid, ...updates })
-    })
-  },
-
-  async create(name: string): Promise<{
-    error?: boolean
-    body?: Dashboard
-  }> {
-    const response = await fetch(`${BACKEND_URL}/dashboard/create`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify({
-        name,
-        visibility: 'private',
-        config: {
-          gridItems: {},
-          blockchainQueries: {}
-        }
-      })
-    })
-    return await response.json()
-  },
-
-  async delete(uuid: string): Promise<void> {
-    await fetch(`${BACKEND_URL}/dashboard/delete`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify({ uuid })
-    })
-  },
-
-  async toggleStar(uuid: string): Promise<{
-    error?: boolean
-    body?: {
-      uuid: string
-      stars_count: number
-      isStarred: boolean
-    }
-  }> {
-    const response = await fetch(`${BACKEND_URL}/dashboard/toggleStar`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify({ uuid })
-    })
-    return await response.json()
   }
 }
 
-const userService = {
-  async login(message: string, signature: string): Promise<{
-    error?: boolean
-    body?: {
-      token: string
-      uuid: string
+const infuraService = {
+  async callContract(request: {
+    to: string
+    data: string
+    from?: string
+    value?: string
+    gas?: string
+    gasPrice?: string
+    chainId: number
+    blockTag?: string
+  }): Promise<{ result: string, error?: string }> {
+    try {
+      const response = await fetch(`${BACKEND_URL}/infura/callContract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request)
+      })
+      if (response.status === 401) return { result: '', error: 'Unauthorized' }
+      const data = await response.json()
+      return data.error ? { result: '', error: data.error } : { result: data.body.result }
+    } catch (error) {
+      console.error('Error in callContract:', error)
+      return { result: '', error: 'Error calling contract' }
     }
-  }> {
-    const response = await fetch(`${BACKEND_URL}/user/login`, {
+  },
+  async getNativeGasBalance(request: { address: string, chainId: number }): Promise<{ balance: string, error?: string }> {
+    try {
+      const response = await fetch(`${BACKEND_URL}/infura/getNativeGasBalance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request)
+      })
+      if (!response.ok) return { balance: '0', error: 'Request failed' }
+      const data = await response.json()
+      return data.error ? { balance: '0', error: data.error } : { balance: data.body.balance }
+    } catch (error) {
+      console.error('Error in getNativeGasBalance:', error)
+      return { balance: '0', error: 'Error fetching native gas balance' }
+    }
+  }
+}
+
+export async function queryFinancialAdvisor({ instructions, messages }: { instructions: string, messages: { role: string, content: string }[] }): Promise<{ result: string, error?: string }> {
+  try {
+    const response = await fetch(`${BACKEND_URL}/financialAdvisor/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, signature })
+      body: JSON.stringify({ instructions, messages })
     })
-    return await response.json()
-  }
-}
-
-const blockchainService = {
-  async getNetworks(): Promise<NetworkList> {
-    const response = await fetch(`${BACKEND_URL}/blockchain/list`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify({})
-    })
+    if (!response.ok) return { result: '', error: 'Request failed' }
     const data = await response.json()
-    return data.error ? {} : data.body
-  },
-
-  async callBlockchain(request: {
-    address: string
-    functionSignature: string
-    network: string
-    networkEnv: string
-    params: any[]
-  }): Promise<{
-    error?: boolean
-    body?: any
-  }> {
-    const response = await fetch(`${BACKEND_URL}/blockchain/call`, {
-      method: 'POST',
-      headers: getAuthHeader(),
-      body: JSON.stringify(request)
-    })
-    return await response.json()
+    if (data.error) return { result: '', error: data.error }
+    return { result: data.body }
+  } catch (error) {
+    return { result: '', error: 'Error querying financial advisor' }
   }
 }
 
-export {
-  blockchainService,
-  dashboardService,
-  userService
-}
+export { etherscanService, infuraService }
