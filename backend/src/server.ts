@@ -4,29 +4,25 @@ import { PORT } from './config'
 import { logger, pinoConfig } from './logger'
 import { sendReply } from './utils'
 import * as yup from 'yup'
-import { handleLogin, loginSchema } from './handlers/user'
-import { authenticateRequest } from './handlers/authentication'
 import {
-  createDashboard,
-  createDashboardSchema,
-  updateDashboard,
-  updateDashboardSchema,
-  deleteDashboard,
-  deleteDashboardSchema,
-  readDashboard,
-  readDashboardSchema,
-  toggleStar,
-  toggleStarSchema,
-  listDashboards,
-  listDashboardsSchema
-} from './handlers/dashboards'
+  getTxHistory,
+  getTxHistorySchema,
+  getTokenBalance,
+  getTokenBalanceSchema,
+  buildContractABIMappingAndExtractTokens,
+  buildContractABIMappingAndExtractTokensSchema
+} from './handlers/etherscan'
 import {
-  callBlockchain,
-  callBlockchainSchema,
-  listBlockchains,
-  listBlockchainsSchema
-} from './handlers/blockchain'
-import { User } from './models'
+  callContract,
+  callContractSchema,
+  getNativeGasBalance,
+  getNativeGasBalanceSchema
+} from './handlers/infura'
+import {
+  queryFinancialAdvisor,
+  queryFinancialAdvisorSchema
+} from './handlers/financialAdvisor'
+import { Cache } from './handlers/cache'
 
 type Response<ResponseBody extends any> = {
   response: ResponseBody | string
@@ -35,7 +31,6 @@ type Response<ResponseBody extends any> = {
 }
 
 type RequestHandler<RequestBodySchema extends yup.ISchema<any, any, any, any>, ResponseBody> = (
-  userUuid: User["uuid"],
   request: yup.InferType<RequestBodySchema>
 ) => Promise<Response<ResponseBody>>
 
@@ -44,10 +39,12 @@ const app = fastify({
   bodyLimit: 1024 * 1024 * 16, // 16 MiB
 })
 
+const requestCache = new Cache(new Map())
+
 const requestMiddleware = <T extends yup.ISchema<any, any, any, any>>(
+  methodName: string,
   requestHandler: RequestHandler<T, any>,
-  requestBodySchema: T,
-  requireAuth: boolean = true
+  requestBodySchema: T
 ) => async (request: FastifyRequest, reply: FastifyReply) => {
   try {
     const { body } = request
@@ -70,13 +67,7 @@ const requestMiddleware = <T extends yup.ISchema<any, any, any, any>>(
       })
     }
 
-    let userUuid = null
-    if (requireAuth) {
-      userUuid = await authenticateRequest(request, reply)
-      if (!userUuid) return
-    }
-
-    const { response, error, status } = await requestHandler(userUuid as string, validatedBody)
+    const { response, error, status } = await requestCache.process(methodName, requestHandler, validatedBody)
     sendReply({ body: response, error, status, reply })
   } catch (error: any) {
     logger.error({ message: 'Request error', error })
@@ -90,15 +81,12 @@ const requestMiddleware = <T extends yup.ISchema<any, any, any, any>>(
 }
 
 // Route definitions
-app.post('/blockchain/call', requestMiddleware(callBlockchain, callBlockchainSchema))
-app.post('/blockchain/list', requestMiddleware(listBlockchains, listBlockchainsSchema))
-app.post('/dashboard/create', requestMiddleware(createDashboard, createDashboardSchema))
-app.post('/dashboard/delete', requestMiddleware(deleteDashboard, deleteDashboardSchema))
-app.post('/dashboard/list', requestMiddleware(listDashboards, listDashboardsSchema))
-app.post('/dashboard/read', requestMiddleware(readDashboard, readDashboardSchema))
-app.post('/dashboard/toggleStar', requestMiddleware(toggleStar, toggleStarSchema))
-app.post('/dashboard/update', requestMiddleware(updateDashboard, updateDashboardSchema))
-app.post('/user/login', requestMiddleware(handleLogin, loginSchema, false))
+app.post('/etherscan/getTxHistory', requestMiddleware('getTxHistory', getTxHistory, getTxHistorySchema))
+app.post('/etherscan/getTokenBalance', requestMiddleware('getTokenBalance', getTokenBalance, getTokenBalanceSchema))
+app.post('/etherscan/buildContractABIMappingAndExtractTokens', requestMiddleware('buildContractABIMappingAndExtractTokens', buildContractABIMappingAndExtractTokens, buildContractABIMappingAndExtractTokensSchema))
+app.post('/infura/callContract', requestMiddleware('callContract', callContract, callContractSchema))
+app.post('/infura/getNativeGasBalance', requestMiddleware('getNativeGasBalance', getNativeGasBalance, getNativeGasBalanceSchema))
+app.post('/financialAdvisor/query', requestMiddleware('queryFinancialAdvisor', queryFinancialAdvisor, queryFinancialAdvisorSchema))
 
 const start = async () => {
   try {
@@ -111,7 +99,7 @@ const start = async () => {
     logger.info({ msg: `Starting service on port ${PORT}` })
     await app.listen({ port: parseInt(PORT), host: '0.0.0.0' })
   } catch (error) {
-    logger.error(error)
+    logger.error({ message: 'Server startup error', error })
     process.exit(1)
   }
 }
